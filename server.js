@@ -32,6 +32,7 @@ const supabase = createClient(
 
 const onlineUsers = {};
 const GROUP_TIMEOUT_MINUTES = 30;
+const MESSAGE_TTL_MINUTES = 60;
 
 function nowTime() {
   return new Date().toLocaleTimeString();
@@ -61,11 +62,14 @@ app.get("/debug/env", (req, res) => {
 });
 
 app.get("/debug/users", async (req, res) => {
-  const { data, error } = await supabase.from("users").select("username, created_at");
+  const { data, error } = await supabase
+    .from("users")
+    .select("username, created_at");
+
   res.json({ data, error });
 });
 
-// ================= AUTH =================
+/* ================= AUTH ================= */
 
 app.post("/api/register", async (req, res) => {
   try {
@@ -75,7 +79,10 @@ app.post("/api/register", async (req, res) => {
     const fatherName = String(req.body.fatherName || "");
 
     if (!username || !password) {
-      return res.json({ success: false, message: "Missing username/password" });
+      return res.json({
+        success: false,
+        message: "Missing username/password"
+      });
     }
 
     const { data: existing, error: findError } = await supabase
@@ -87,23 +94,28 @@ app.post("/api/register", async (req, res) => {
     if (findError) throw findError;
 
     if (existing) {
-      return res.json({ success: false, message: "Username already exists" });
+      return res.json({
+        success: false,
+        message: "Username already exists"
+      });
     }
 
-    const { error } = await supabase.from("users").insert({
-      username,
-      password,
-      mother_name: motherName,
-      father_name: fatherName,
-      profile_pic: ""
-    });
+    const { error } = await supabase
+      .from("users")
+      .insert({
+        username,
+        password,
+        mother_name: motherName,
+        father_name: fatherName,
+        profile_pic: ""
+      });
 
     if (error) throw error;
 
-    return res.json({ success: true });
+    res.json({ success: true });
   } catch (err) {
     console.log("REGISTER ERROR:", err);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: err.message || "Server error"
     });
@@ -125,17 +137,22 @@ app.post("/api/login", async (req, res) => {
     if (error) throw error;
 
     if (!user) {
-      return res.json({ success: false, message: "Invalid username or password" });
+      return res.json({
+        success: false,
+        message: "Invalid username or password"
+      });
     }
 
     const sessionId = makeSessionId();
 
-    await supabase.from("sessions").insert({
-      session_id: sessionId,
-      username: user.username
-    });
+    await supabase
+      .from("sessions")
+      .insert({
+        session_id: sessionId,
+        username: user.username
+      });
 
-    return res.json({
+    res.json({
       success: true,
       username: user.username,
       profilePic: user.profile_pic || "",
@@ -143,7 +160,7 @@ app.post("/api/login", async (req, res) => {
     });
   } catch (err) {
     console.log("LOGIN ERROR:", err);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: err.message || "Server error"
     });
@@ -152,9 +169,14 @@ app.post("/api/login", async (req, res) => {
 
 app.post("/api/logout", async (req, res) => {
   const sessionId = req.body.sessionId;
+
   if (sessionId) {
-    await supabase.from("sessions").delete().eq("session_id", sessionId);
+    await supabase
+      .from("sessions")
+      .delete()
+      .eq("session_id", sessionId);
   }
+
   res.json({ success: true });
 });
 
@@ -206,7 +228,10 @@ app.post("/api/forgot-password", async (req, res) => {
     if (error) throw error;
 
     if (!user) {
-      return res.json({ success: false, message: "Security details not matched" });
+      return res.json({
+        success: false,
+        message: "Security details not matched"
+      });
     }
 
     const { error: updateError } = await supabase
@@ -219,11 +244,14 @@ app.post("/api/forgot-password", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.log("FORGOT ERROR:", err);
-    res.status(500).json({ success: false, message: err.message || "Server error" });
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+    });
   }
 });
 
-// ================= PROFILE PIC =================
+/* ================= PROFILE PIC ================= */
 
 app.post("/api/upload-pic", async (req, res) => {
   try {
@@ -231,7 +259,10 @@ app.post("/api/upload-pic", async (req, res) => {
     const imageData = req.body.imageData || "";
 
     if (!username || !imageData) {
-      return res.json({ success: false, message: "Missing image/user" });
+      return res.json({
+        success: false,
+        message: "Missing image/user"
+      });
     }
 
     const { error } = await supabase
@@ -244,7 +275,10 @@ app.post("/api/upload-pic", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.log("UPLOAD PIC ERROR:", err);
-    res.status(500).json({ success: false, message: err.message || "Upload failed" });
+    res.status(500).json({
+      success: false,
+      message: err.message || "Upload failed"
+    });
   }
 });
 
@@ -260,13 +294,15 @@ app.get("/api/get-pic", async (req, res) => {
 
     if (error) throw error;
 
-    res.json({ profilePic: data?.profile_pic || "" });
-  } catch (err) {
+    res.json({
+      profilePic: data?.profile_pic || ""
+    });
+  } catch {
     res.json({ profilePic: "" });
   }
 });
 
-// ================= FRIENDS =================
+/* ================= FRIENDS ================= */
 
 app.get("/user-exists", async (req, res) => {
   try {
@@ -280,7 +316,10 @@ app.get("/user-exists", async (req, res) => {
 
     if (error) throw error;
 
-    res.json({ exists: !!data, username: data?.username || null });
+    res.json({
+      exists: !!data,
+      username: data?.username || null
+    });
   } catch (err) {
     console.log("USER EXISTS ERROR:", err);
     res.json({ exists: false });
@@ -298,7 +337,9 @@ app.get("/api/friends", async (req, res) => {
 
     if (error) throw error;
 
-    const friends = (data || []).map(f => f.user1 === username ? f.user2 : f.user1);
+    const friends = (data || []).map(f =>
+      f.user1 === username ? f.user2 : f.user1
+    );
 
     res.json({ friends });
   } catch (err) {
@@ -319,7 +360,9 @@ app.get("/api/friend-requests", async (req, res) => {
 
     if (error) throw error;
 
-    res.json({ requests: (data || []).map(r => r.from_user) });
+    res.json({
+      requests: (data || []).map(r => r.from_user)
+    });
   } catch (err) {
     console.log("REQ ERROR:", err);
     res.json({ requests: [] });
@@ -332,7 +375,10 @@ app.post("/api/send-friend-request", async (req, res) => {
     const cleanTo = cleanName(req.body.to);
 
     if (!cleanFrom || !cleanTo || cleanFrom.toLowerCase() === cleanTo.toLowerCase()) {
-      return res.json({ success: false, message: "Invalid request" });
+      return res.json({
+        success: false,
+        message: "Invalid request"
+      });
     }
 
     const { data: target, error: targetError } = await supabase
@@ -344,7 +390,10 @@ app.post("/api/send-friend-request", async (req, res) => {
     if (targetError) throw targetError;
 
     if (!target) {
-      return res.json({ success: false, message: "User not registered" });
+      return res.json({
+        success: false,
+        message: "User not registered"
+      });
     }
 
     const realTo = target.username;
@@ -358,23 +407,31 @@ app.post("/api/send-friend-request", async (req, res) => {
     if (friendError) throw friendError;
 
     if (alreadyFriend) {
-      return res.json({ success: false, message: "Already friends" });
+      return res.json({
+        success: false,
+        message: "Already friends"
+      });
     }
 
-    const { error } = await supabase.from("friend_requests").upsert({
-      from_user: cleanFrom,
-      to_user: realTo,
-      status: "pending"
-    }, {
-      onConflict: "from_user,to_user"
-    });
+    const { error } = await supabase
+      .from("friend_requests")
+      .upsert({
+        from_user: cleanFrom,
+        to_user: realTo,
+        status: "pending"
+      }, {
+        onConflict: "from_user,to_user"
+      });
 
     if (error) throw error;
 
     res.json({ success: true });
   } catch (err) {
     console.log("SEND FRIEND ERROR:", err);
-    res.status(500).json({ success: false, message: err.message || "Server error" });
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+    });
   }
 });
 
@@ -383,12 +440,14 @@ app.post("/api/accept-friend", async (req, res) => {
     const from = cleanName(req.body.from);
     const to = cleanName(req.body.to);
 
-    const { error } = await supabase.from("friends").upsert({
-      user1: from,
-      user2: to
-    }, {
-      onConflict: "user1,user2"
-    });
+    const { error } = await supabase
+      .from("friends")
+      .upsert({
+        user1: from,
+        user2: to
+      }, {
+        onConflict: "user1,user2"
+      });
 
     if (error) throw error;
 
@@ -405,7 +464,10 @@ app.post("/api/accept-friend", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.log("ACCEPT ERROR:", err);
-    res.status(500).json({ success: false, message: err.message || "Server error" });
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+    });
   }
 });
 
@@ -434,7 +496,7 @@ app.post("/api/remove-friend", async (req, res) => {
   res.json({ success: true });
 });
 
-// ================= PRIVATE MESSAGES =================
+/* ================= PRIVATE MESSAGES ================= */
 
 app.post("/api/send-private-message", async (req, res) => {
   try {
@@ -443,19 +505,24 @@ app.post("/api/send-private-message", async (req, res) => {
     const text = String(req.body.text || "");
     const time = req.body.time || nowTime();
 
-    const { error } = await supabase.from("private_messages").insert({
-      from_user: from,
-      to_user: to,
-      text,
-      time
-    });
+    const { error } = await supabase
+      .from("private_messages")
+      .insert({
+        from_user: from,
+        to_user: to,
+        text,
+        time
+      });
 
     if (error) throw error;
 
     res.json({ success: true });
   } catch (err) {
     console.log("PRIVATE SEND ERROR:", err);
-    res.status(500).json({ success: false, message: err.message || "Server error" });
+    res.status(500).json({
+      success: false,
+      message: err.message || "Server error"
+    });
   }
 });
 
@@ -464,10 +531,20 @@ app.get("/api/private-messages", async (req, res) => {
     const user1 = cleanName(req.query.user1);
     const user2 = cleanName(req.query.user2);
 
+    const cutoff = new Date(
+      Date.now() - MESSAGE_TTL_MINUTES * 60 * 1000
+    ).toISOString();
+
+    await supabase
+      .from("private_messages")
+      .delete()
+      .lt("created_at", cutoff);
+
     const { data, error } = await supabase
       .from("private_messages")
       .select("*")
       .or(`and(from_user.eq.${user1},to_user.eq.${user2}),and(from_user.eq.${user2},to_user.eq.${user1})`)
+      .gte("created_at", cutoff)
       .order("created_at", { ascending: true });
 
     if (error) throw error;
@@ -479,7 +556,7 @@ app.get("/api/private-messages", async (req, res) => {
   }
 });
 
-// ================= GROUP HELPERS =================
+/* ================= GROUP HELPERS ================= */
 
 async function getGroup(groupId) {
   const { data, error } = await supabase
@@ -510,6 +587,7 @@ async function deleteGroup(groupId) {
   io.to(groupId).emit("group-closed");
 
   const room = io.sockets.adapter.rooms.get(groupId);
+
   if (room) {
     room.forEach(socketId => {
       const s = io.sockets.sockets.get(socketId);
@@ -520,10 +598,13 @@ async function deleteGroup(groupId) {
     });
   }
 
-  await supabase.from("groups").delete().eq("id", groupId);
+  await supabase
+    .from("groups")
+    .delete()
+    .eq("id", groupId);
 }
 
-// ================= SOCKET =================
+/* ================= SOCKET ================= */
 
 io.on("connection", socket => {
   console.log("Socket connected:", socket.id);
@@ -531,6 +612,7 @@ io.on("connection", socket => {
   socket.on("register-user", ({ username }) => {
     const clean = cleanName(username);
     socket.username = clean;
+
     if (clean) onlineUsers[clean] = socket.id;
   });
 
@@ -539,18 +621,22 @@ io.on("connection", socket => {
       const cleanUser = cleanName(userId);
       const groupId = makeGroupId();
 
-      const { error: gError } = await supabase.from("groups").insert({
-        id: groupId,
-        admin: cleanUser,
-        last_activity: new Date().toISOString()
-      });
+      const { error: gError } = await supabase
+        .from("groups")
+        .insert({
+          id: groupId,
+          admin: cleanUser,
+          last_activity: new Date().toISOString()
+        });
 
       if (gError) throw gError;
 
-      const { error: mError } = await supabase.from("group_members").insert({
-        group_id: groupId,
-        username: cleanUser
-      });
+      const { error: mError } = await supabase
+        .from("group_members")
+        .insert({
+          group_id: groupId,
+          username: cleanUser
+        });
 
       if (mError) throw mError;
 
@@ -559,10 +645,14 @@ io.on("connection", socket => {
 
       socket.emit("group-created", groupId);
       socket.emit("admin-status", true);
+      socket.emit("old-messages", []);
+
       io.to(groupId).emit("online-users", await getGroupMembers(groupId));
     } catch (err) {
       console.log("CREATE GROUP ERROR:", err);
-      socket.emit("group-error", { message: err.message || "Create group failed" });
+      socket.emit("group-error", {
+        message: err.message || "Create group failed"
+      });
     }
   });
 
@@ -574,7 +664,9 @@ io.on("connection", socket => {
       const group = await getGroup(cleanGroup);
 
       if (!group) {
-        socket.emit("group-error", { message: "Group not found or expired" });
+        socket.emit("group-error", {
+          message: "Group not found or expired"
+        });
         return;
       }
 
@@ -583,232 +675,16 @@ io.on("connection", socket => {
         .update({ last_activity: new Date().toISOString() })
         .eq("id", cleanGroup);
 
-      await supabase.from("group_members").upsert({
-        group_id: cleanGroup,
-        username: cleanUser
-      }, {
-        onConflict: "group_id,username"
-      });
-
-      const { data: oldMsgs } = await supabase
-        .from("group_messages")
-        .select("username,text,time")
-        .eq("group_id", cleanGroup)
-        .order("created_at", { ascending: true });
-
-      socket.join(cleanGroup);
-      socket.currentGroup = cleanGroup;
-
-      socket.emit("joined-group", cleanGroup);
-      socket.emit("admin-status", group.admin === cleanUser);
-      socket.emit("old-messages", (oldMsgs || []).map(m => ({
-        user: m.username,
-        text: m.text,
-        time: m.time
-      })));
-
-      io.to(cleanGroup).emit("online-users", await getGroupMembers(cleanGroup));
-    } catch (err) {
-      console.log("JOIN GROUP ERROR:", err);
-      socket.emit("group-error", { message: err.message || "Join group failed" });
-    }
-  });
-
-  socket.on("rejoin-group", async ({ groupId, userId }) => {
-    try {
-      const cleanGroup = cleanName(groupId);
-      const cleanUser = cleanName(userId);
-
-      const group = await getGroup(cleanGroup);
-
-      if (!group) {
-        socket.emit("group-error", { message: "Group not found or expired" });
-        return;
-      }
-
-      await supabase.from("group_members").upsert({
-        group_id: cleanGroup,
-        username: cleanUser
-      }, {
-        onConflict: "group_id,username"
-      });
-
-      const { data: oldMsgs } = await supabase
-        .from("group_messages")
-        .select("username,text,time")
-        .eq("group_id", cleanGroup)
-        .order("created_at", { ascending: true });
-
-      socket.join(cleanGroup);
-      socket.currentGroup = cleanGroup;
-
-      socket.emit("admin-status", group.admin === cleanUser);
-      socket.emit("old-messages", (oldMsgs || []).map(m => ({
-        user: m.username,
-        text: m.text,
-        time: m.time
-      })));
-
-      io.to(cleanGroup).emit("online-users", await getGroupMembers(cleanGroup));
-    } catch (err) {
-      console.log("REJOIN GROUP ERROR:", err);
-      socket.emit("group-error", { message: err.message || "Rejoin failed" });
-    }
-  });
-
-  socket.on("send-message", async ({ groupId, msg }) => {
-    try {
-      const cleanGroup = cleanName(groupId);
-
-      const group = await getGroup(cleanGroup);
-      if (!group) {
-        socket.emit("group-error", { message: "Group not found or expired" });
-        return;
-      }
-
-      const savedMsg = {
-        user: cleanName(msg.user),
-        text: String(msg.text || ""),
-        time: msg.time || nowTime()
-      };
-
       await supabase
-        .from("groups")
-        .update({ last_activity: new Date().toISOString() })
-        .eq("id", cleanGroup);
+        .from("group_members")
+        .upsert({
+          group_id: cleanGroup,
+          username: cleanUser
+        }, {
+          onConflict: "group_id,username"
+        });
 
-      const { data: picUser } = await supabase
-        .from("users")
-        .select("profile_pic")
-        .ilike("username", savedMsg.user)
-        .maybeSingle();
+      socket.join(cleanGroup);
+      socket.currentGroup = cleanGroup;
 
-      const { error } = await supabase.from("group_messages").insert({
-        group_id: cleanGroup,
-        username: savedMsg.user,
-        text: savedMsg.text,
-        time: savedMsg.time,
-        profile_pic: picUser?.profile_pic || ""
-      });
-
-      if (error) throw error;
-
-      io.to(cleanGroup).emit("new-message", savedMsg);
-    } catch (err) {
-      console.log("SEND GROUP MSG ERROR:", err);
-      socket.emit("group-error", { message: err.message || "Message failed" });
-    }
-  });
-
-  socket.on("play-video", async ({ groupId, videoId }) => {
-    const cleanGroup = cleanName(groupId);
-
-    await supabase
-      .from("groups")
-      .update({
-        current_video: videoId,
-        last_activity: new Date().toISOString()
-      })
-      .eq("id", cleanGroup);
-
-    socket.to(cleanGroup).emit("sync-video", { videoId });
-  });
-
-  socket.on("leave-group", async ({ groupId, userId }) => {
-    const cleanGroup = cleanName(groupId);
-    const cleanUser = cleanName(userId);
-
-    await supabase
-      .from("group_members")
-      .delete()
-      .eq("group_id", cleanGroup)
-      .eq("username", cleanUser);
-
-    socket.leave(cleanGroup);
-    socket.currentGroup = null;
-    socket.emit("left-group", { groupId: cleanGroup });
-
-    const members = await getGroupMembers(cleanGroup);
-
-    if (members.length === 0) {
-      await deleteGroup(cleanGroup);
-      return;
-    }
-
-    io.to(cleanGroup).emit("online-users", members);
-  });
-
-  socket.on("close-group", async ({ groupId, userId }) => {
-    try {
-      const cleanGroup = cleanName(groupId);
-      const cleanUser = cleanName(userId);
-
-      const group = await getGroup(cleanGroup);
-
-      if (!group) {
-        socket.emit("group-error", { message: "Group already closed" });
-        return;
-      }
-
-      if (group.admin !== cleanUser) {
-        socket.emit("group-error", { message: "Only admin can close group" });
-        return;
-      }
-
-      await deleteGroup(cleanGroup);
-    } catch (err) {
-      console.log("CLOSE GROUP ERROR:", err);
-      socket.emit("group-error", { message: err.message || "Close group failed" });
-    }
-  });
-
-  socket.on("private-message", data => {
-    if (!data || !data.to || !data.from) return;
-    if (onlineUsers[data.to]) {
-      io.to(onlineUsers[data.to]).emit("private-message", data);
-    }
-  });
-
-  socket.on("profile-pic-updated", data => {
-    socket.broadcast.emit("profile-pic-updated", data);
-  });
-
-  socket.on("friend-accepted", ({ from, to }) => {
-    if (onlineUsers[from]) {
-      io.to(onlineUsers[from]).emit("friend-request-accepted", { by: to });
-    }
-  });
-
-  socket.on("disconnect", () => {
-    if (socket.username && onlineUsers[socket.username] === socket.id) {
-      delete onlineUsers[socket.username];
-    }
-  });
-});
-
-// ================= CLEANUP =================
-
-setInterval(async () => {
-  try {
-    const cutoff = new Date(Date.now() - GROUP_TIMEOUT_MINUTES * 60 * 1000).toISOString();
-
-    const { data: oldGroups } = await supabase
-      .from("groups")
-      .select("id")
-      .lt("last_activity", cutoff);
-
-    for (const g of oldGroups || []) {
-      await deleteGroup(g.id);
-    }
-  } catch (err) {
-    console.log("CLEANUP ERROR:", err);
-  }
-}, 60 * 1000);
-
-// ================= START =================
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
-});
+      socket.emit("joined-group", cleanGroup
