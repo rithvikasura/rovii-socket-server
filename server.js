@@ -32,7 +32,7 @@ const supabase = createClient(
 
 const onlineUsers = {};
 const GROUP_TIMEOUT_MINUTES = 30;
-const MESSAGE_TTL_MINUTES = 60;
+const MESSAGE_TTL_MINUTES = 60 * 24 * 7; // 7 days (changed from 60 minutes)
 
 function nowTime() {
   return new Date().toLocaleTimeString();
@@ -454,11 +454,7 @@ app.get("/api/private-messages", async (req, res) => {
 
     const cutoff = new Date(Date.now() - MESSAGE_TTL_MINUTES * 60 * 1000).toISOString();
 
-    await supabase
-      .from("private_messages")
-      .delete()
-      .lt("created_at", cutoff);
-
+    // Don't delete old messages on GET - separate cleanup
     const { data, error } = await supabase
       .from("private_messages")
       .select("*")
@@ -500,6 +496,25 @@ async function getGroupMembers(groupId) {
   }
 
   return (data || []).map(x => x.username);
+}
+
+async function getGroupMessages(groupId) {
+  const cutoff = new Date(Date.now() - MESSAGE_TTL_MINUTES * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("group_messages")
+    .select("*")
+    .eq("group_id", groupId)
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: true })
+    .limit(100);
+
+  if (error) {
+    console.log("GROUP MSGS ERROR:", error);
+    return [];
+  }
+
+  return data || [];
 }
 
 async function deleteGroup(groupId) {
@@ -562,9 +577,17 @@ io.on("connection", socket => {
       socket.join(groupId);
       socket.currentGroup = groupId;
 
+      // ✅ FIXED: Send old messages
+      const oldMessages = await getGroupMessages(groupId);
+      const formattedMessages = oldMessages.map(m => ({
+        user: m.username,
+        text: m.text,
+        time: m.time
+      }));
+
       socket.emit("group-created", groupId);
       socket.emit("admin-status", true);
-      socket.emit("old-messages", []);
+      socket.emit("old-messages", formattedMessages);
 
       io.to(groupId).emit("online-users", await getGroupMembers(groupId));
     } catch (err) {
@@ -602,9 +625,17 @@ io.on("connection", socket => {
       socket.join(cleanGroup);
       socket.currentGroup = cleanGroup;
 
+      // ✅ FIXED: Send old messages to new member
+      const oldMessages = await getGroupMessages(cleanGroup);
+      const formattedMessages = oldMessages.map(m => ({
+        user: m.username,
+        text: m.text,
+        time: m.time
+      }));
+
       socket.emit("joined-group", cleanGroup);
       socket.emit("admin-status", group.admin === cleanUser);
-      socket.emit("old-messages", []);
+      socket.emit("old-messages", formattedMessages);
 
       io.to(cleanGroup).emit("online-users", await getGroupMembers(cleanGroup));
     } catch (err) {
@@ -637,8 +668,16 @@ io.on("connection", socket => {
       socket.join(cleanGroup);
       socket.currentGroup = cleanGroup;
 
+      // ✅ FIXED: Send old messages on rejoin
+      const oldMessages = await getGroupMessages(cleanGroup);
+      const formattedMessages = oldMessages.map(m => ({
+        user: m.username,
+        text: m.text,
+        time: m.time
+      }));
+
       socket.emit("admin-status", group.admin === cleanUser);
-      socket.emit("old-messages", []);
+      socket.emit("old-messages", formattedMessages);
 
       io.to(cleanGroup).emit("online-users", await getGroupMembers(cleanGroup));
     } catch (err) {
@@ -787,6 +826,7 @@ setInterval(async () => {
     const groupCutoff = new Date(Date.now() - GROUP_TIMEOUT_MINUTES * 60 * 1000).toISOString();
     const msgCutoff = new Date(Date.now() - MESSAGE_TTL_MINUTES * 60 * 1000).toISOString();
 
+    // Clean old messages
     await supabase.from("group_messages").delete().lt("created_at", msgCutoff);
     await supabase.from("private_messages").delete().lt("created_at", msgCutoff);
 
